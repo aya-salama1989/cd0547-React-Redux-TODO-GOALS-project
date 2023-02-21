@@ -8,22 +8,12 @@
     <link rel="stylesheet" type="text/css" media="screen" href="main.css" />
     <script src="main.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/redux/4.1.2/redux.min.js"></script>
-
+    <script src="https://unpkg.com/react@17.0.2/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17.0.2/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.17.6/babel.min.js"></script>
   </head>
   <body>
-    <div>
-      <h1>Todo List</h1>
-      <input type="text" id="todo" />
-      <button id="btn_todo">Add Todo</button>
-      <ul id="todos_list"></ul>
-    </div>
-
-    <div>
-      <h1>Goals</h1>
-      <input type="text" id="goal" />
-      <button id="btn_goal">Add Goal</button>
-      <ul id="goals_list"></ul>
-    </div>
+    <div id="app"></div>
 
     <script type="text/javascript">
       const ADD_TODO = "ADD_TODO";
@@ -109,14 +99,6 @@
         }
       }
 
-      function app(state = {}, action) {
-        return {
-          todos: todosReducer(state.todos, action),
-          goals: goalsReducer(state.goals, action),
-        };
-      }
-
-
       function generateId() {
         return (
           Math.random().toString(36).substring(2) +
@@ -124,95 +106,137 @@
         );
       }
 
-      const store = Redux.createStore(app);
+      const checker = (store) => (next) => (action) => {
+        if (action.type === ADD_TODO && action.todo.name === "") {
+          alert("Empty Todo :( ");
+        }
+
+        if (action.type === ADD_GOAL && action.goal.name === "") {
+          alert("Empty goal :( ");
+        }
+
+        return next(action);
+      };
+
+      const logger = (store) => (next) => (action) => {
+        console.group(action.type);
+        console.log("the action is: ", action);
+        const result = next(action);
+        console.log("The new state is: ", result);
+        console.groupEnd();
+      };
+
+      const store = Redux.createStore(
+        Redux.combineReducers({
+          todosReducer,
+          goalsReducer,
+        }),
+        Redux.applyMiddleware(checker, logger)
+      );
 
       store.subscribe(() => {
         console.log("The new state is: ", store.getState());
-        const { goals, todos } = store.getState();
-
-        document.getElementById("goals_list").innerHTML = "";
-        document.getElementById("todos_list").innerHTML = "";
-
-        goals.forEach(addGoalToTheDom);
-        todos.forEach(addTodoToTheDom);
+        const { goalsReducer, todosReducer } = store.getState();
       });
+    </script>
 
-      function addTodo() {
-        const input = document.getElementById("todo");
-        const todo = input.value;
-        input.value = "";
-
-        store.dispatch(
-          addTodoAction({
-            id: generateId(),
-            name: todo,
-            complete: false,
-          })
+    <script type="text/babel">
+      const List = (props) => {
+        return (
+          <ul>
+            {props.items &&
+              props.items.map((item) => (
+                <li key={item.id}>
+                  <span>{item.name}</span>
+                  <button onClick={() => props.remove(item)}>X</button>
+                </li>
+              ))}
+          </ul>
         );
-      }
+      };
 
-      function addGoal() {
-        const input = document.getElementById("goal");
-        const goal = input.value;
-        input.value = "";
+      const Todos = (props) => {
+        console.log("Todos items is: ", props.todos);
 
-        store.dispatch(
-          addGoalAction({
-            id: generateId(),
-            name: goal,
-            done: true,
-          })
+        const inputRef = React.useRef();
+
+        const addItem = (e) => {
+          e.preventDefault();
+          const name = inputRef.current.value;
+          inputRef.current.value = "";
+
+          props.store.dispatch(
+            addTodoAction({
+              name,
+              complete: false,
+              id: generateId(),
+            })
+          );
+        };
+
+        const removeItem = (todo) => {
+          props.store.dispatch(removeTodoAction(todo.id));
+        };
+
+        return (
+          <div>
+            <h1>Todos List</h1>
+            <input type="text" placeholder="add to do" ref={inputRef} />
+            <button onClick={addItem}>Add to do</button>
+            <List remove={removeItem} items={props.todos} />
+          </div>
         );
-      }
+      };
 
-      document.getElementById("btn_todo").addEventListener("click", addTodo);
-      document.getElementById("btn_goal").addEventListener("click", addGoal);
+      const Goals = (props) => {
+        const inputRef = React.useRef();
 
-      function createRemoveButton(onClick) {
-        const removeBtn = document.createElement("button");
-        removeBtn.innerHTML = "X";
-        removeBtn.addEventListener("click", onClick);
-        return removeBtn;
-      }
+        const addGoal = () => {
+          const goalName = inputRef.current.value;
 
-      function addTodoToTheDom(todo) {
-        const node = document.createElement("li");
-        const text = document.createTextNode(todo.name);
-        node.appendChild(text);
+          inputRef.current.value = "";
 
-        const removeButton = createRemoveButton(() => {
-          store.dispatch(removeTodoAction(todo.id));
-        });
-        node.appendChild(removeButton);
+          props.store.dispatch(
+            addGoalAction({
+              id: generateId(),
+              name: goalName,
+              done: true,
+            })
+          );
+        };
 
-        node.style.textDecoration = todo.complete ? "line-through" : "none";
-        node.addEventListener("click", () => {
-          store.dispatch(toggleTodoAction(todo.id));
-        });
+        const removeItem = (goal) => {
+          props.store.dispatch(removeGoalAction(goal.id));
+        };
 
-        const todosList = document.getElementById("todos_list");
-        todosList.appendChild(node);
-      }
+        return (
+          <div>
+            <h1>GOALS List</h1>
+            <input type="text" placeholder="add goal" ref={inputRef} />
+            <button onClick={addGoal}>Add goal</button>
+            <List remove={removeItem} items={props.goals} />
+          </div>
+        );
+      };
 
-      function addGoalToTheDom(goal) {
-        const node = document.createElement("li");
-        const text = document.createTextNode(goal.name);
-        node.appendChild(text);
+      const App = (props) => {
+        const [value, setValue] = React.useState(0);
 
-        const removeButton = createRemoveButton(() => {
-          store.dispatch(removeGoalAction(goal.id));
-        });
-        node.appendChild(removeButton);
+        React.useEffect(() => {
+          store.subscribe(() => setValue((value) => value + 1));
+        }, []);
 
-        node.style.background = goal.done ? "red" : "white";
+        const { todosReducer, goalsReducer } = store.getState();
 
-        node.addEventListener("click", () => {
-          store.dispatch(toggleGoalAction(goal.id));
-        });
+        return (
+          <div>
+            <Todos todos={todosReducer} store={props.store} />
+            <Goals goals={goalsReducer} store={props.store} />
+          </div>
+        );
+      };
 
-        const goalsList = document.getElementById("goals_list");
-        goalsList.appendChild(node);
-      }
+      ReactDOM.render(<App store={store} />, document.getElementById("app"));
     </script>
   </body>
 </html>
